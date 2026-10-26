@@ -105,7 +105,7 @@ function handle(m) {
     case 'submit':
       pendingPhoto = null;
       app.innerHTML = `${bar}<h2>Submit your poop 📸</h2>
-        <div class="muted">Take a fresh pic or upload one. Crop out anything that gives you away (toilet brand, bathroom tiles, feet…).</div>
+        <div class="muted">One photo for the whole game. Take a fresh pic or upload one. Crop out anything that gives you away (toilet brand, bathroom tiles, feet…).</div>
         <div id="prev"></div>
         <label class="btn-list"><button type="button" id="snap">📷 Take / choose photo</button></label>
         <input type="file" id="file" accept="image/*" capture="environment">
@@ -156,6 +156,66 @@ function handle(m) {
       else if (mine && mine.correct) body = `<h1 class="good">✅ Correct!</h1><h2>+${mine.pts}</h2>`;
       else body = `<h1 class="bad">❌ Nope</h1><div class="muted">It was ${esc(m.owner ? m.owner.name : '???')}'s</div>`;
       app.innerHTML = `${body}<div class="pill" style="align-self:center">Score: ${mePlayer ? mePlayer.score : 0}</div>`;
+      break;
+    }
+    case 'write':
+      if (!m.isWriter) {
+        app.innerHTML = `${bar}<h2>Two players are roasting this poo ✍️</h2><div class="muted">Watch the big screen. You'll vote on the funniest answer next.</div>`;
+        startTimer(m.deadline);
+        break;
+      }
+      app.innerHTML = `${bar}<h2>You're a writer! ✍️</h2><img class="preview" src="${m.photo}">
+        <div class="muted">Say something about this poo. Funniest answer wins.</div>
+        <textarea id="cap" maxlength="140" rows="3" placeholder="Describe it, roast it, give it a backstory…" style="font:inherit;padding:14px;border-radius:14px;border:3px solid var(--card);background:#2b1a0f;color:var(--ink);width:100%"></textarea>
+        <button id="sendcap">SEND</button>`;
+      startTimer(m.deadline);
+      document.getElementById('sendcap').onclick = () => {
+        const t = document.getElementById('cap').value.trim();
+        if (t) { send({ type: 'text', text: t }); document.getElementById('sendcap').disabled = true; }
+      };
+      break;
+    case 'textOk':
+      app.innerHTML = '<h1>📝 Locked in</h1><div class="muted">Waiting for the other writer…</div>';
+      break;
+    case 'capVote':
+      if (m.isWriter) {
+        app.innerHTML = `${bar}<h2>Everyone is voting on your answer 😬</h2><div class="muted">You can't vote on this one.</div>`;
+        startTimer(m.deadline);
+        break;
+      }
+      app.innerHTML = `${bar}<h2>Which is funnier?</h2><div class="btn-list">${m.answers.map((a, i) => `<button data-c="${i}" class="secondary" style="text-align:left;font-size:1em;line-height:1.3"><b style="color:var(--accent)">${'AB'[i]}</b> &nbsp;${esc(a)}</button>`).join('')}</div>`;
+      startTimer(m.deadline);
+      app.querySelectorAll('[data-c]').forEach((b) => b.onclick = () => {
+        send({ type: 'vote', choice: Number(b.dataset.c) });
+        app.querySelectorAll('[data-c]').forEach((x) => { x.disabled = true; });
+        b.style.outline = '4px solid var(--accent)';
+      });
+      break;
+    case 'voteOk':
+      break;
+    case 'capReveal': {
+      clearInterval(timerIv);
+      const mine = m.results.find((r) => r.author === myName);
+      const mePlayer = m.players.find((p) => p.id === me);
+      app.innerHTML = `${mine ? `<h1 class="${mine.winner ? 'good' : ''}">${mine.winner ? '🏆 You won it!' : 'Not your round'}</h1><h2>+${mine.pts}</h2>` : '<h1>Votes are in</h1>'}<div class="pill" style="align-self:center">Score: ${mePlayer ? mePlayer.score : 0}</div>`;
+      break;
+    }
+    case 'bestVote': {
+      app.innerHTML = `${bar}<h2>Vote for the best poo 🏆</h2><div class="muted">${m.ownIndex >= 0 ? 'You can’t vote for your own.' : 'Tap your favourite.'}</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">${m.photos.map((p, i) => `<button data-b="${i}" class="secondary" ${i === m.ownIndex ? 'disabled' : ''} style="padding:0;position:relative;overflow:hidden;border-radius:14px"><img src="${p}" style="width:100%;height:120px;object-fit:cover;display:block"><b style="position:absolute;top:6px;left:6px;background:var(--accent);color:#2b1a0f;border-radius:99px;padding:1px 10px">${i + 1}</b>${i === m.ownIndex ? '<span style="position:absolute;bottom:6px;right:6px" class="pill">YOURS</span>' : ''}</button>`).join('')}</div>`;
+      startTimer(m.deadline);
+      app.querySelectorAll('[data-b]').forEach((b) => b.onclick = () => {
+        send({ type: 'vote', choice: Number(b.dataset.b) });
+        app.querySelectorAll('[data-b]').forEach((x) => { x.disabled = true; x.style.opacity = x === b ? 1 : .4; });
+        b.style.outline = '4px solid var(--accent)';
+      });
+      break;
+    }
+    case 'bestReveal': {
+      clearInterval(timerIv);
+      const mine = m.ranking.find((r) => r.ownerId === me);
+      const mePlayer = m.players.find((p) => p.id === me);
+      app.innerHTML = `${mine ? `<h1 class="${mine.winner ? 'good' : ''}">${mine.winner ? '🏆 Best poo!' : mine.votes + ' vote' + (mine.votes === 1 ? '' : 's')}</h1><h2>+${mine.pts}</h2>` : '<h1>Results are in</h1>'}<div class="pill" style="align-self:center">Score: ${mePlayer ? mePlayer.score : 0}</div>`;
       break;
     }
     case 'roundSummary': {

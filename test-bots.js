@@ -24,6 +24,12 @@ function bot(name) {
     if (m.type === 'joined') id = m.id;
     if (m.type === 'lobby') { isVip = m.vip === id; if (isVip && m.players.length === 3) ws.send(JSON.stringify({ type: 'start' })); }
     if (m.type === 'submit') ws.send(JSON.stringify({ type: 'photo', data: PIC }));
+    if (m.type === 'write' && m.isWriter) ws.send(JSON.stringify({ type: 'text', text: name + ' says: majestic.' }));
+    if (m.type === 'capVote' && !m.isWriter) ws.send(JSON.stringify({ type: 'vote', choice: Math.floor(Math.random() * 2) }));
+    if (m.type === 'bestVote') {
+      const opts = m.photos.map((_, i) => i).filter((i) => i !== m.ownIndex);
+      ws.send(JSON.stringify({ type: 'vote', choice: opts[Math.floor(Math.random() * opts.length)] }));
+    }
     if (m.type === 'guess' && !m.isOwner) {
       const t = m.players.filter((p) => p.id !== id)[Math.floor(Math.random() * 2)];
       ws.send(JSON.stringify({ type: 'guess', target: t.id }));

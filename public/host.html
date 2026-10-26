@@ -82,7 +82,7 @@ function handle(m) {
         <button id="copy" onclick="navigator.clipboard.writeText('${esc(link)}');this.textContent='Copied! Paste it in Discord'">📋 Copy invite link for Discord</button>
         ${chips(m.players)}
         <div class="muted">${m.players.length < 3 ? `Need at least 3 players (${m.players.length}/3)` : `${esc(vip ? vip.name : '')} can start the game from their phone`}</div>
-        <div class="muted" style="max-width:700px;font-size:.7em">Everyone snaps a pic of their… work. Then the party guesses whose it is. 3 rounds, each worth more. 18+ / strong stomachs only.</div>`;
+        <div class="muted" style="max-width:700px;font-size:.7em">Everyone submits ONE pic of their… work. Round 1: guess whose it is. Round 2: two players roast a poo and the funniest wins. Round 3: vote for the best poo. Each round pays more. 18+ / strong stomachs only.</div>`;
       break;
     }
     case 'roundIntro':
@@ -91,7 +91,7 @@ function handle(m) {
       break;
     case 'submit':
       setRound(m.round);
-      stage.innerHTML = `<h1 class="big">Submit your poop! 📸</h1><div class="muted">Check your phone. Take a pic or upload one. Make it count.</div>${chips(m.players, true)}${timerHtml}<div class="pill"><span id="secs"></span>s</div>`;
+      stage.innerHTML = `<h1 class="big">Submit your poop! 📸</h1><div class="muted">Check your phone. One photo each, used for the whole game. Make it count.</div>${chips(m.players, true)}${timerHtml}<div class="pill"><span id="secs"></span>s</div>`;
       startTimer(m.deadline);
       break;
     case 'submitProgress':
@@ -117,6 +117,47 @@ function handle(m) {
         <div class="muted">${fooled ? `Fooled ${fooled} player${fooled > 1 ? 's' : ''} → <b class="mult">+${m.ownerPts}</b> for ${esc(m.owner.name)}` : 'Nobody was fooled. Too recognizable.'}</div>
         <div class="board" style="flex-direction:row;flex-wrap:wrap;justify-content:center">
           ${m.results.map((r) => `<div class="row ${r.correct ? 'good' : 'bad'}" style="flex:1 1 280px"><span>${r.correct ? '✅' : '❌'} ${esc(r.name)}${r.correct ? '' : ` <span class="muted">(${esc(r.guess || 'no guess')})</span>`}</span><span class="pts">${r.correct ? '+' + r.pts : ''}</span></div>`).join('')}
+        </div>`;
+      break;
+    }
+    case 'write':
+      setRound(m.round);
+      stage.innerHTML = `<div class="pill">Poo ${m.index} of ${m.count}</div><h1>SAY SOMETHING ABOUT THIS POO</h1><img class="poop" style="max-height:42vh" src="${m.photo}">
+        <div class="muted"><b class="mult">${esc(m.writers[0].name)}</b> and <b class="mult">${esc(m.writers[1].name)}</b> are writing. Everyone else will vote on the funniest.</div>${timerHtml}<div class="pill"><span id="secs"></span>s</div>`;
+      startTimer(m.deadline);
+      break;
+    case 'capVote':
+      setRound(m.round);
+      stage.innerHTML = `<h1>WHICH IS FUNNIER?</h1><img class="poop" style="max-height:28vh" src="${m.photo}">
+        <div class="board" style="flex-direction:row;flex-wrap:wrap;justify-content:center;width:min(1100px,92vw)">
+          ${m.answers.map((a, i) => `<div class="row" style="flex:1 1 420px;font-size:1.1em;text-align:left;line-height:1.3"><span><b class="mult">${'AB'[i]}</b> &nbsp;${esc(a)}</span></div>`).join('')}
+        </div><div id="gp" class="muted">0 votes in</div>${timerHtml}<div class="pill"><span id="secs"></span>s</div>`;
+      startTimer(m.deadline);
+      break;
+    case 'voteProgress':
+      document.getElementById('gp').textContent = `${m.done} / ${m.total} votes in`;
+      break;
+    case 'capReveal':
+      clearInterval(timerIv);
+      stage.innerHTML = `<img class="poop" style="max-height:26vh" src="${m.photo}">
+        <div class="board" style="flex-direction:row;flex-wrap:wrap;justify-content:center;width:min(1100px,92vw)">
+          ${m.results.map((r) => `<div class="row ${r.winner ? 'good' : 'bad'}" style="flex:1 1 420px;flex-direction:column;align-items:flex-start;gap:6px;text-align:left"><span style="font-weight:600">“${esc(r.text)}”</span><span>${r.winner ? '🏆 ' : ''}${esc(r.author)} <span class="muted">· ${r.votes} vote${r.votes === 1 ? '' : 's'}</span> <span class="pts">+${r.pts}</span></span></div>`).join('')}
+        </div>`;
+      break;
+    case 'bestVote':
+      setRound(m.round);
+      stage.innerHTML = `<h1>VOTE FOR THE BEST POO 🏆</h1>
+        <div style="display:flex;flex-wrap:wrap;gap:14px;justify-content:center;max-width:1200px">
+          ${m.photos.map((p, i) => `<div style="position:relative"><img src="${p}" style="height:${m.photos.length > 6 ? 22 : 30}vh;border-radius:16px;border:5px solid var(--card)"><b style="position:absolute;top:8px;left:8px;background:var(--accent);color:#2b1a0f;border-radius:99px;padding:2px 14px;font-size:1.2em">${i + 1}</b></div>`).join('')}
+        </div><div id="gp" class="muted">0 votes in</div>${timerHtml}<div class="pill"><span id="secs"></span>s</div>`;
+      startTimer(m.deadline);
+      break;
+    case 'bestReveal': {
+      clearInterval(timerIv);
+      const w = m.ranking.filter((r) => r.winner);
+      stage.innerHTML = `<h1 class="big">${w.length ? '🏆 ' + w.map((r) => esc(r.owner)).join(' & ') + (w.length > 1 ? ' tie!' : ' has the best poo!') : 'Nobody voted. Tragic.'}</h1>
+        <div style="display:flex;flex-wrap:wrap;gap:14px;justify-content:center;max-width:1200px">
+          ${m.ranking.map((r) => `<div style="text-align:center"><img src="${r.photo}" style="height:22vh;border-radius:16px;border:5px solid ${r.winner ? 'var(--accent)' : 'var(--card)'}"><div><b>${esc(r.owner)}</b></div><div class="muted">${r.votes} vote${r.votes === 1 ? '' : 's'} · <span class="mult">+${r.pts}</span></div></div>`).join('')}
         </div>`;
       break;
     }
