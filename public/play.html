@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
-<title>TURDLE</title>
+<title>Who Shit In My Pants?</title>
 <link rel="stylesheet" href="shared.css">
 <style>
   body { padding: 20px; max-width: 520px; margin: 0 auto; }
@@ -27,7 +27,7 @@ const send = (o) => ws && ws.readyState === 1 && ws.send(JSON.stringify(o));
 
 function joinScreen(err) {
   const saved = (() => { try { return JSON.parse(localStorage.getItem('turdle') || '{}'); } catch { return {}; } })();
-  app.innerHTML = `<div class="logo">💩 TURDLE</div><div class="muted">Match the poop to its owner</div>
+  app.innerHTML = `<div class="logo" style="font-size:2.2em">💩 WHO SHIT IN MY PANTS?</div><div class="muted">Match the poop to its owner</div>
     ${err ? `<div class="bad">${esc(err)}</div>` : ''}
     <input id="code" placeholder="ROOM CODE" maxlength="4" autocapitalize="characters" autocomplete="off" value="${esc(new URLSearchParams(location.search).get('code') || saved.code || '')}">
     <input id="name" placeholder="YOUR NAME" maxlength="14" autocomplete="off" value="${esc(saved.name || '')}">

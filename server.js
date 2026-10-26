@@ -1,4 +1,4 @@
-// TURDLE server: static files + WebSocket game rooms. Photos live in memory only.
+// WHO SHIT IN MY PANTS? server: static files + WebSocket game rooms. Photos live in memory only.
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
@@ -257,7 +257,7 @@ wss.on('connection', (ws) => {
 
 server.listen(PORT, () => {
   const ips = Object.values(os.networkInterfaces()).flat().filter((i) => i.family === 'IPv4' && !i.internal).map((i) => i.address);
-  console.log('\n  TURDLE is running!');
+  console.log('\n  WHO SHIT IN MY PANTS? is running!');
   console.log(`  Host screen (TV/laptop):  http://localhost:${PORT}`);
   ips.forEach((ip) => console.log(`  Players join on phone:    http://${ip}:${PORT}/play`));
   console.log('');
