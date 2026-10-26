@@ -1,0 +1,9 @@
+{
+  "name": "turdle",
+  "version": "1.0.0",
+  "description": "Jackbox-style party game: match the poop to its owner.",
+  "main": "server.js",
+  "engines": { "node": ">=18" },
+  "scripts": { "start": "node server.js" },
+  "dependencies": { "ws": "^8.18.0" }
+}

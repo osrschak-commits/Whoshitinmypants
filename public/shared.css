@@ -1,0 +1,16 @@
+:root {
+  --bg: #2b1a0f; --bg2: #3e2716; --card: #4d321d; --ink: #fff4e0; --muted: #c9a98a;
+  --accent: #ffc83d; --good: #69db7c; --bad: #ff6b6b; --poop: #8b5a2b;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; min-height: 100%; background: radial-gradient(circle at 50% 0%, var(--bg2), var(--bg)); color: var(--ink); font-family: "Trebuchet MS", "Segoe UI", system-ui, sans-serif; }
+h1, h2, h3 { margin: 0; font-family: "Arial Rounded MT Bold", "Trebuchet MS", sans-serif; letter-spacing: .5px; }
+button { font: inherit; cursor: pointer; border: 0; border-radius: 16px; padding: 14px 22px; background: var(--accent); color: #3a2200; font-weight: 800; box-shadow: 0 5px 0 #b88a14; }
+button:active { transform: translateY(3px); box-shadow: 0 2px 0 #b88a14; }
+button:disabled { opacity: .45; cursor: not-allowed; }
+input { font: inherit; padding: 14px; border-radius: 14px; border: 3px solid var(--card); background: #2b1a0f; color: var(--ink); width: 100%; }
+.logo { font-size: 3.2em; color: var(--accent); text-shadow: 0 4px 0 #6b4510; }
+.muted { color: var(--muted); }
+.pill { display: inline-block; padding: 6px 14px; border-radius: 99px; background: var(--card); font-weight: 700; }
+.timerbar { height: 12px; border-radius: 99px; background: var(--card); overflow: hidden; }
+.timerbar > i { display: block; height: 100%; background: var(--accent); width: 100%; transition: width .25s linear; }

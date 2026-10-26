@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TURDLE – Host</title>
+<link rel="stylesheet" href="shared.css">
+<style>
+  body { display: flex; flex-direction: column; min-height: 100vh; padding: 28px 40px; font-size: 22px; }
+  #stage { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 22px; }
+  .code { font-size: 7em; letter-spacing: .15em; color: var(--accent); font-family: "Arial Black", sans-serif; text-shadow: 0 6px 0 #6b4510; }
+  .players { display: flex; flex-wrap: wrap; gap: 14px; justify-content: center; max-width: 1100px; }
+  .chip { padding: 12px 22px; border-radius: 99px; font-weight: 800; color: #2b1a0f; font-size: 1em; animation: pop .3s; }
+  .chip.off { opacity: .35; }
+  .chip.done::after { content: " ✓"; }
+  @keyframes pop { from { transform: scale(.4); } to { transform: scale(1); } }
+  .poop { max-height: 52vh; max-width: 80vw; border-radius: 28px; border: 8px solid var(--card); box-shadow: 0 12px 0 #1d1108; animation: drop .5s cubic-bezier(.3,1.6,.5,1); object-fit: contain; background: #000; }
+  @keyframes drop { from { transform: translateY(-120px) rotate(-8deg) scale(.6); opacity: 0; } }
+  .big { font-size: 3.4em; }
+  .board { width: min(760px, 90vw); display: flex; flex-direction: column; gap: 10px; }
+  .row { display: flex; justify-content: space-between; align-items: center; padding: 12px 22px; border-radius: 16px; background: var(--card); font-weight: 800; }
+  .row .pts { color: var(--accent); }
+  .row.good { outline: 3px solid var(--good); } .row.bad { opacity: .75; }
+  .banner { padding: 6px 20px; border-radius: 99px; background: var(--poop); font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
+  .mult { color: var(--accent); }
+  #topbar { display: flex; justify-content: space-between; align-items: center; min-height: 44px; }
+  .winner { font-size: 5em; animation: pop .6s; }
+  .qr { background: #fff; padding: 10px; border-radius: 16px; }
+  button { font-size: 1em; }
+</style>
+</head>
+<body>
+<div id="topbar"><span class="logo" style="font-size:1.6em">💩 TURDLE</span><span id="roundtag" class="banner" style="display:none"></span></div>
+<div id="stage"></div>
+<script>
+const stage = document.getElementById('stage');
+const roundtag = document.getElementById('roundtag');
+let ws, roomCode = '', timerIv = null;
+
+function connect() {
+  ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host);
+  ws.onopen = () => ws.send(JSON.stringify({ type: 'createRoom' }));
+  ws.onmessage = (e) => handle(JSON.parse(e.data));
+  ws.onclose = () => { stage.innerHTML = '<h2>Connection lost. Refresh to start over.</h2>'; };
+}
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const chips = (ps, showDone) => `<div class="players">${ps.map((p) => `<span class="chip ${p.connected ? '' : 'off'} ${showDone && p.hasSubmitted ? 'done' : ''}" style="background:${p.color}">${esc(p.name)}</span>`).join('')}</div>`;
+const board = (ps) => `<div class="board">${[...ps].sort((a, b) => b.score - a.score).map((p, i) => `<div class="row"><span>${i + 1}. ${esc(p.name)}</span><span class="pts">${p.score}</span></div>`).join('')}</div>`;
+
+function startTimer(deadline) {
+  clearInterval(timerIv);
+  const total = deadline - Date.now();
+  const bar = document.querySelector('.timerbar > i');
+  const label = document.getElementById('secs');
+  timerIv = setInterval(() => {
+    const left = Math.max(0, deadline - Date.now());
+    if (bar) bar.style.width = (left / total * 100) + '%';
+    if (label) label.textContent = Math.ceil(left / 1000);
+    if (!left) clearInterval(timerIv);
+  }, 200);
+}
+const timerHtml = '<div style="width:min(700px,80vw)"><div class="timerbar"><i></i></div></div>';
+
+function setRound(r) {
+  if (!r) { roundtag.style.display = 'none'; return; }
+  roundtag.style.display = '';
+  roundtag.innerHTML = `Round ${r.n} · <span class="mult">x${r.mult}</span>`;
+}
+
+function handle(m) {
+  switch (m.type) {
+    case 'lobby': {
+      roomCode = m.code; setRound(null); clearInterval(timerIv);
+      // Over a tunnel/public host use that address; only fall back to the LAN address on localhost.
+      const isLocal = /^(localhost|127\.|\[::1\])/.test(location.hostname);
+      const url = isLocal ? (m.joinUrl || location.host + '/play') : location.host + '/play';
+      const link = (location.protocol + '//' + (isLocal ? url : location.host + '/play')) + '?code=' + m.code;
+      const vip = m.players.find((p) => p.id === m.vip);
+      stage.innerHTML = `
+        <div class="muted">On your phone, go to <b style="color:var(--ink)">${esc(url)}</b> and enter</div>
+        <div class="code">${esc(m.code)}</div>
+        <button id="copy" onclick="navigator.clipboard.writeText('${esc(link)}');this.textContent='Copied! Paste it in Discord'">📋 Copy invite link for Discord</button>
+        ${chips(m.players)}
+        <div class="muted">${m.players.length < 3 ? `Need at least 3 players (${m.players.length}/3)` : `${esc(vip ? vip.name : '')} can start the game from their phone`}</div>
+        <div class="muted" style="max-width:700px;font-size:.7em">Everyone snaps a pic of their… work. Then the party guesses whose it is. 3 rounds, each worth more. 18+ / strong stomachs only.</div>`;
+      break;
+    }
+    case 'roundIntro':
+      setRound(m.round);
+      stage.innerHTML = `<div class="banner">Round ${m.round.n} of ${m.total}</div><h1 class="logo big">${esc(m.round.name)}</h1><h2 class="mult">x${m.round.mult} points</h2><div class="muted">${esc(m.round.tagline)}</div>`;
+      break;
+    case 'submit':
+      setRound(m.round);
+      stage.innerHTML = `<h1 class="big">Submit your poop! 📸</h1><div class="muted">Check your phone. Take a pic or upload one. Make it count.</div>${chips(m.players, true)}${timerHtml}<div class="pill"><span id="secs"></span>s</div>`;
+      startTimer(m.deadline);
+      break;
+    case 'submitProgress':
+      stage.querySelector('.players').outerHTML = chips(m.players, true);
+      break;
+    case 'skipped':
+      stage.innerHTML = `<h1 class="big">😬</h1><h2>${esc(m.reason)}</h2>`;
+      break;
+    case 'guess':
+      setRound(m.round);
+      stage.innerHTML = `<div class="pill">Poop ${m.index} of ${m.count}</div><h1>WHOSE POOP IS THIS?</h1><img class="poop" src="${m.photo}"><div id="gp" class="muted">0 guesses in</div>${timerHtml}<div class="pill"><span id="secs"></span>s</div>`;
+      startTimer(m.deadline);
+      break;
+    case 'guessProgress':
+      document.getElementById('gp').textContent = `${m.done} / ${m.total} guesses in`;
+      break;
+    case 'reveal': {
+      clearInterval(timerIv);
+      const fooled = m.results.filter((r) => !r.correct).length;
+      stage.innerHTML = `
+        <h1 class="big">It was <span class="mult">${esc(m.owner ? m.owner.name : '???')}</span>'s!</h1>
+        <img class="poop" style="max-height:30vh" src="${m.photo}">
+        <div class="muted">${fooled ? `Fooled ${fooled} player${fooled > 1 ? 's' : ''} → <b class="mult">+${m.ownerPts}</b> for ${esc(m.owner.name)}` : 'Nobody was fooled. Too recognizable.'}</div>
+        <div class="board" style="flex-direction:row;flex-wrap:wrap;justify-content:center">
+          ${m.results.map((r) => `<div class="row ${r.correct ? 'good' : 'bad'}" style="flex:1 1 280px"><span>${r.correct ? '✅' : '❌'} ${esc(r.name)}${r.correct ? '' : ` <span class="muted">(${esc(r.guess || 'no guess')})</span>`}</span><span class="pts">${r.correct ? '+' + r.pts : ''}</span></div>`).join('')}
+        </div>`;
+      break;
+    }
+    case 'roundSummary':
+      setRound(m.round);
+      stage.innerHTML = `<h1 class="big">Round ${m.round.n} scores</h1>${board(m.players)}<div class="muted">${m.last ? 'Calculating the final flush…' : 'Next round pays more…'}</div>`;
+      break;
+    case 'final': {
+      setRound(null);
+      const w = m.ranking[0];
+      stage.innerHTML = `<div class="winner">🏆💩</div><h1 class="big">${esc(w.name)} wins!</h1><div class="muted">Crowned the Ruler of the Royal Throne</div>${board(m.ranking)}<div class="muted">VIP can hit "Play again" on their phone.</div>`;
+      break;
+    }
+    case 'error':
+      stage.innerHTML = `<h2>${esc(m.message)}</h2>`;
+      break;
+  }
+}
+connect();
+</script>
+</body>
+</html>

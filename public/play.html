@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>TURDLE</title>
+<link rel="stylesheet" href="shared.css">
+<style>
+  body { padding: 20px; max-width: 520px; margin: 0 auto; }
+  #app { display: flex; flex-direction: column; gap: 16px; text-align: center; padding-top: 10px; }
+  .btn-list { display: flex; flex-direction: column; gap: 12px; }
+  .btn-list button { font-size: 1.2em; color: #2b1a0f; }
+  .preview { width: 100%; max-height: 40vh; object-fit: contain; border-radius: 18px; border: 5px solid var(--card); background: #000; }
+  .secondary { background: var(--card); color: var(--ink); box-shadow: 0 5px 0 #25160a; }
+  .score { position: sticky; top: 0; padding: 8px; background: var(--bg); font-weight: 800; }
+  .good { color: var(--good); } .bad { color: var(--bad); }
+  input[type=file] { display: none; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+const app = document.getElementById('app');
+let ws, me = null, myName = '', code = '', pendingPhoto = null, vip = false, timerIv = null;
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const send = (o) => ws && ws.readyState === 1 && ws.send(JSON.stringify(o));
+
+function joinScreen(err) {
+  const saved = (() => { try { return JSON.parse(localStorage.getItem('turdle') || '{}'); } catch { return {}; } })();
+  app.innerHTML = `<div class="logo">💩 TURDLE</div><div class="muted">Match the poop to its owner</div>
+    ${err ? `<div class="bad">${esc(err)}</div>` : ''}
+    <input id="code" placeholder="ROOM CODE" maxlength="4" autocapitalize="characters" autocomplete="off" value="${esc(new URLSearchParams(location.search).get('code') || saved.code || '')}">
+    <input id="name" placeholder="YOUR NAME" maxlength="14" autocomplete="off" value="${esc(saved.name || '')}">
+    <button id="go">Join</button>`;
+  document.getElementById('go').onclick = () => {
+    code = document.getElementById('code').value.trim().toUpperCase();
+    myName = document.getElementById('name').value.trim();
+    try { localStorage.setItem('turdle', JSON.stringify({ code, name: myName })); } catch {}
+    connect(() => send({ type: 'join', code, name: myName }));
+  };
+}
+
+function connect(onopen) {
+  if (ws) ws.close();
+  ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host);
+  ws.onopen = onopen;
+  ws.onmessage = (e) => handle(JSON.parse(e.data));
+  ws.onclose = () => { if (me) { app.innerHTML = '<h2>Disconnected…</h2><button onclick="location.reload()">Rejoin</button>'; } };
+}
+
+function startTimer(deadline, id) {
+  clearInterval(timerIv);
+  const total = deadline - Date.now();
+  timerIv = setInterval(() => {
+    const left = Math.max(0, deadline - Date.now());
+    const bar = document.querySelector('.timerbar > i');
+    if (bar) bar.style.width = (left / total * 100) + '%';
+    if (!left) clearInterval(timerIv);
+  }, 200);
+}
+const bar = '<div class="timerbar"><i></i></div>';
+
+// Resize + compress so uploads stay small and fast over wifi.
+function processFile(file) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const max = 900, s = Math.min(1, max / Math.max(img.width, img.height));
+      const c = document.createElement('canvas');
+      c.width = Math.round(img.width * s); c.height = Math.round(img.height * s);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(img.src);
+      resolve(c.toDataURL('image/jpeg', 0.75));
+    };
+    img.onerror = reject;
+    img.src = URL.createObjectURL(file);
+  });
+}
+
+function handle(m) {
+  switch (m.type) {
+    case 'error':
+      if (!me) return joinScreen(m.message);
+      app.innerHTML = `<h2>${esc(m.message)}</h2><button onclick="location.reload()">Back</button>`;
+      break;
+    case 'joined':
+      me = m.id;
+      break;
+    case 'lobby': {
+      if (!me) return;
+      vip = m.vip === me;
+      clearInterval(timerIv);
+      const n = m.players.length;
+      app.innerHTML = `<div class="logo" style="font-size:2.4em">You're in!</div>
+        <div class="pill" style="align-self:center">${esc(myName)}</div>
+        <div class="muted">${n} player${n === 1 ? '' : 's'} in the room</div>
+        ${vip ? `<button id="start" ${n < 3 ? 'disabled' : ''}>${n < 3 ? 'Need 3+ players' : 'START GAME'}</button><div class="muted">You're the VIP.</div>` : '<div class="muted">Waiting for the VIP to start…</div>'}`;
+      const b = document.getElementById('start');
+      if (b) b.onclick = () => send({ type: 'start' });
+      break;
+    }
+    case 'roundIntro':
+      app.innerHTML = `<div class="pill" style="align-self:center">Round ${m.round.n} of ${m.total}</div><h1 class="logo" style="font-size:2.2em">${esc(m.round.name)}</h1><h2 style="color:var(--accent)">x${m.round.mult} points</h2><div class="muted">${esc(m.round.tagline)}</div>`;
+      break;
+    case 'submit':
+      pendingPhoto = null;
+      app.innerHTML = `${bar}<h2>Submit your poop 📸</h2>
+        <div class="muted">Take a fresh pic or upload one. Crop out anything that gives you away (toilet brand, bathroom tiles, feet…).</div>
+        <div id="prev"></div>
+        <label class="btn-list"><button type="button" id="snap">📷 Take / choose photo</button></label>
+        <input type="file" id="file" accept="image/*" capture="environment">
+        <button id="sendbtn" style="display:none">SEND IT</button>`;
+      startTimer(m.deadline);
+      document.getElementById('snap').onclick = () => document.getElementById('file').click();
+      document.getElementById('file').onchange = async (e) => {
+        const f = e.target.files[0]; if (!f) return;
+        try {
+          pendingPhoto = await processFile(f);
+          document.getElementById('prev').innerHTML = `<img class="preview" src="${pendingPhoto}">`;
+          document.getElementById('sendbtn').style.display = '';
+          document.getElementById('snap').textContent = '🔁 Retake';
+        } catch { alert('Could not read that image.'); }
+      };
+      document.getElementById('sendbtn').onclick = () => { if (pendingPhoto) { send({ type: 'photo', data: pendingPhoto }); document.getElementById('sendbtn').disabled = true; } };
+      break;
+    case 'photoOk':
+      clearInterval(timerIv);
+      app.innerHTML = `<h1>🚽 Flushed!</h1><div class="muted">Photo received. Waiting for the others…</div>${pendingPhoto ? `<img class="preview" src="${pendingPhoto}">` : ''}`;
+      break;
+    case 'skipped':
+      app.innerHTML = `<h2>${esc(m.reason)}</h2>`;
+      break;
+    case 'guess':
+      if (m.isOwner) {
+        app.innerHTML = `${bar}<h1>👀 That's YOURS</h1><div class="muted">Keep a straight face. Every player you fool earns you points.</div>`;
+        startTimer(m.deadline);
+        break;
+      }
+      app.innerHTML = `${bar}<h2>Whose poop is it?</h2><div class="muted">Poop ${m.index} of ${m.count} — look at the big screen</div>
+        <div class="btn-list">${m.players.filter((p) => p.id !== me && p.connected).map((p) => `<button data-id="${p.id}" style="background:${p.color}">${esc(p.name)}</button>`).join('')}</div>`;
+      startTimer(m.deadline);
+      app.querySelectorAll('[data-id]').forEach((b) => b.onclick = () => {
+        send({ type: 'guess', target: b.dataset.id });
+        app.querySelectorAll('[data-id]').forEach((x) => x.disabled = true);
+        b.textContent = '✔ ' + b.textContent;
+      });
+      break;
+    case 'guessOk':
+      break;
+    case 'reveal': {
+      clearInterval(timerIv);
+      const mine = m.results.find((r) => r.id === me);
+      const mePlayer = m.players.find((p) => p.id === me);
+      let body;
+      if (m.owner && m.owner.id === me) body = `<h1>${m.ownerPts ? '😈 You fooled them!' : '😅 Everyone knew.'}</h1><h2 class="good">+${m.ownerPts}</h2>`;
+      else if (mine && mine.correct) body = `<h1 class="good">✅ Correct!</h1><h2>+${mine.pts}</h2>`;
+      else body = `<h1 class="bad">❌ Nope</h1><div class="muted">It was ${esc(m.owner ? m.owner.name : '???')}'s</div>`;
+      app.innerHTML = `${body}<div class="pill" style="align-self:center">Score: ${mePlayer ? mePlayer.score : 0}</div>`;
+      break;
+    }
+    case 'roundSummary': {
+      const sorted = [...m.players].sort((a, b) => b.score - a.score);
+      const rank = sorted.findIndex((p) => p.id === me) + 1;
+      app.innerHTML = `<h2>Round ${m.round.n} done</h2><h1>#${rank}</h1><div class="muted">${sorted[rank - 1].score} pts</div>`;
+      break;
+    }
+    case 'final': {
+      const rank = m.ranking.findIndex((p) => p.id === me) + 1;
+      app.innerHTML = `<h1>${rank === 1 ? '🏆 YOU WIN' : 'Game over'}</h1><h2>You placed #${rank}</h2>${vip ? '<button id="again">Play again</button>' : '<div class="muted">Waiting for VIP…</div>'}`;
+      const b = document.getElementById('again');
+      if (b) b.onclick = () => send({ type: 'restart' });
+      break;
+    }
+  }
+}
+joinScreen();
+</script>
+</body>
+</html>
